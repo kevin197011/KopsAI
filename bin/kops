@@ -1,0 +1,214 @@
+#!/usr/bin/env ruby
+# Copyright (c) 2025 kk
+#
+# This software is released under the MIT License.
+# https://opensource.org/licenses/MIT
+
+require 'thor'
+require 'kops_ai'
+
+module KopsAI
+  class CLI < Thor
+    class_option :verbose, type: :boolean, aliases: '-v', desc: 'Enable verbose output'
+    class_option :config, type: :string, desc: 'Path to configuration file'
+
+    desc 'check system', 'Check system resources'
+    def check(type = 'all')
+      result = agent.execute_plugin('system_check', type)
+      puts Utils::Formatter.format_system_check(result)
+    end
+
+    desc 'ssh exec', 'Execute command via SSH'
+    option :host, required: true, desc: 'Target host'
+    option :command, required: true, desc: 'Command to execute'
+    option :username, desc: 'SSH username'
+    option :password, desc: 'SSH password'
+    option :key_path, desc: 'SSH key path'
+    def ssh_exec
+      result = agent.execute_plugin('ssh_remote',
+                                    host: options[:host],
+                                    command: options[:command],
+                                    username: options[:username],
+                                    password: options[:password],
+                                    key_path: options[:key_path])
+      puts Utils::Formatter.format_ssh_result(result)
+    end
+
+    desc 'k8s', 'Kubernetes operations'
+    option :action, required: true, desc: 'Action to perform (pods, nodes, services, logs, status)'
+    option :namespace, desc: 'Kubernetes namespace'
+    option :pod, desc: 'Pod name (for logs action)'
+    option :tail, type: :numeric, desc: 'Number of log lines to fetch'
+    def k8s
+      result = agent.execute_plugin('k8s_agent', options[:action],
+                                    namespace: options[:namespace],
+                                    pod: options[:pod],
+                                    tail: options[:tail])
+
+      case options[:action]
+      when 'pods'
+        puts Utils::Formatter.format_k8s_pods(result)
+      when 'nodes'
+        puts Utils::Formatter.format_k8s_nodes(result)
+      else
+        puts JSON.pretty_generate(result)
+      end
+    end
+
+    desc 'gpt analyze-log', 'Analyze log with GPT'
+    option :log_file, required: true, desc: 'Path to log file'
+    option :context, desc: 'Additional context for analysis'
+    def analyze_log
+      log_content = File.read(options[:log_file])
+      result = agent.execute_plugin('gpt_support', 'analyze_log',
+                                    log_content: log_content,
+                                    context: options[:context])
+      puts Utils::Formatter.format_gpt_analysis(result)
+    end
+
+    desc 'gpt suggest-fix', 'Get fix suggestion from GPT'
+    option :issue, required: true, desc: 'Issue description'
+    option :context, desc: 'Additional context'
+    def suggest_fix
+      result = agent.execute_plugin('gpt_support', 'suggest_fix',
+                                    issue: options[:issue],
+                                    context: options[:context])
+      puts Utils::Formatter.format_gpt_analysis(result)
+    end
+
+    desc 'gpt explain-command', 'Explain command with GPT'
+    option :command, required: true, desc: 'Command to explain'
+    def explain_command
+      result = agent.execute_plugin('gpt_support', 'explain_command',
+                                    command: options[:command])
+      puts Utils::Formatter.format_gpt_analysis(result)
+    end
+
+    desc 'gpt generate-script', 'Generate script with GPT'
+    option :task, required: true, desc: 'Task description'
+    option :language, default: 'bash', desc: 'Script language'
+    def generate_script
+      result = agent.execute_plugin('gpt_support', 'generate_script',
+                                    task: options[:task],
+                                    language: options[:language])
+      puts result[:script]
+    end
+
+    desc 'notify', 'Send notification'
+    option :platform, required: true, desc: 'Platform (dingtalk, feishu, telegram, webhook)'
+    option :message, required: true, desc: 'Message to send'
+    option :title, desc: 'Message title'
+    option :level, default: 'info', desc: 'Message level'
+    def notify
+      result = agent.execute_plugin('notifier',
+                                    platform: options[:platform],
+                                    message: options[:message],
+                                    title: options[:title],
+                                    level: options[:level])
+      puts Utils::Formatter.format_notification_result(result)
+    end
+
+    desc 'log analyze', 'Analyze log file'
+    option :log_file, required: true, desc: 'Path to log file'
+    option :patterns, desc: 'Custom patterns (JSON)'
+    def analyze
+      patterns = options[:patterns] ? JSON.parse(options[:patterns]) : nil
+      result = agent.execute_plugin('log_agent', 'analyze',
+                                    log_file: options[:log_file],
+                                    patterns: patterns)
+      puts Utils::Formatter.format_log_analysis(result)
+    end
+
+    desc 'log search', 'Search log file'
+    option :log_file, required: true, desc: 'Path to log file'
+    option :query, required: true, desc: 'Search query'
+    option :lines, type: :numeric, default: 100, desc: 'Number of lines to return'
+    def search
+      result = agent.execute_plugin('log_agent', 'search',
+                                    log_file: options[:log_file],
+                                    query: options[:query],
+                                    lines: options[:lines])
+      puts "Found #{result[:matches]} matches:"
+      puts result[:lines].join
+    end
+
+    desc 'log extract-errors', 'Extract errors from log file'
+    option :log_file, required: true, desc: 'Path to log file'
+    option :hours, type: :numeric, default: 24, desc: 'Hours to look back'
+    def extract_errors
+      result = agent.execute_plugin('log_agent', 'extract_errors',
+                                    log_file: options[:log_file],
+                                    hours: options[:hours])
+      puts "Found #{result[:total_errors]} errors in the last #{options[:hours]} hours:"
+      result[:errors].each do |error|
+        puts "[#{error[:level].upcase}] #{error[:line]}"
+      end
+    end
+
+    desc 'prometheus query', 'Query Prometheus metrics'
+    option :query, required: true, desc: 'PromQL query'
+    option :start, desc: 'Start time (ISO 8601)'
+    option :end, desc: 'End time (ISO 8601)'
+    def query
+      result = agent.execute_plugin('prometheus_agent', 'query',
+                                    query: options[:query],
+                                    start: options[:start],
+                                    end: options[:end])
+      puts JSON.pretty_generate(result)
+    end
+
+    desc 'jenkins jobs', 'List Jenkins jobs'
+    def jobs
+      result = agent.execute_plugin('jenkins_agent', 'jobs')
+      puts JSON.pretty_generate(result)
+    end
+
+    desc 'jenkins build', 'Trigger Jenkins build'
+    option :job_name, required: true, desc: 'Job name'
+    option :parameters, desc: 'Build parameters (JSON)'
+    def build
+      parameters = options[:parameters] ? JSON.parse(options[:parameters]) : {}
+      result = agent.execute_plugin('jenkins_agent', 'build',
+                                    job_name: options[:job_name],
+                                    parameters: parameters)
+      puts JSON.pretty_generate(result)
+    end
+
+    desc 'run task', 'Run a task file'
+    option :file, required: true, desc: 'Task file path (.yml, .yaml, .rb)'
+    def run
+      result = KopsAI.run_task(options[:file])
+      puts JSON.pretty_generate(result)
+    end
+
+    desc 'plugins', 'List available plugins'
+    def plugins
+      plugins = agent.list_plugins
+      table = TTY::Table.new(
+        header: %w[Name Description Version Available],
+        rows: plugins.map do |plugin|
+          [
+            plugin[:name],
+            plugin[:description],
+            plugin[:version],
+            plugin[:available] ? '✅' : '❌'
+          ]
+        end
+      )
+      puts table.render(:ascii)
+    end
+
+    desc 'version', 'Show version'
+    def version
+      puts "KopsAI v#{KopsAI::VERSION}"
+    end
+
+    private
+
+    def agent
+      @agent ||= KopsAI.agent
+    end
+  end
+end
+
+KopsAI::CLI.start(ARGV)

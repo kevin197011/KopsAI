@@ -1,0 +1,36 @@
+# Copyright (c) 2025 kk
+#
+# This software is released under the MIT License.
+# https://opensource.org/licenses/MIT
+
+# KopsAI Configuration File
+
+# Logging configuration
+log_level: "info"
+service_name: "kops-ai"
+
+# OpenAI GPT configuration
+openai_api_key: "${OPENAI_API_KEY}"
+openai_model: "gpt-4"
+
+# Prometheus configuration
+prometheus_url: "${PROMETHEUS_URL}"
+
+# Jenkins configuration
+jenkins_url: "${JENKINS_URL}"
+jenkins_username: "${JENKINS_USERNAME}"
+jenkins_token: "${JENKINS_TOKEN}"
+
+# Kubernetes configuration
+k8s_config_path: "${KUBECONFIG}"
+
+# Notification configuration
+notification_webhook: "${NOTIFICATION_WEBHOOK}"
+dingtalk_webhook: "${DINGTALK_WEBHOOK}"
+feishu_webhook: "${FEISHU_WEBHOOK}"
+telegram_bot_token: "${TELEGRAM_BOT_TOKEN}"
+telegram_chat_id: "${TELEGRAM_CHAT_ID}"
+
+# SSH configuration
+ssh_timeout: 30
+ssh_retries: 3

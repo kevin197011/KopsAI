@@ -1,0 +1,25 @@
+# Copyright (c) 2025 kk
+#
+# This software is released under the MIT License.
+# https://opensource.org/licenses/MIT
+
+# Memory check and restart task
+name: "Memory Check and Restart"
+description: "Check memory usage and restart service if over threshold"
+
+tasks:
+  - type: "system_check"
+    check_type: "memory"
+    name: "Check memory usage"
+
+  - type: "ssh"
+    host: "10.0.1.23"
+    command: "df -h"
+    username: "admin"
+    name: "Check disk usage on remote host"
+
+  - type: "notify"
+    platform: "webhook"
+    message: "Memory check completed"
+    level: "info"
+    name: "Send notification"
